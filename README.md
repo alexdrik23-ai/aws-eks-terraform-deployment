@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project provisions an Amazon EKS cluster using Terraform and is designed to demonstrate hands-on AWS and DevOps skills.
+This project provisions an Amazon EKS cluster using Terraform and is designed to deploy an application.
 
 ## Skills Demonstrated
 
