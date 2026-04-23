@@ -1,35 +1,33 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# VPC
+# VPC — look up the VPC created by the aws-networking repo
+# Deploy aws-networking first, then run this repo against the same
+# project_name / environment values.
 # ─────────────────────────────────────────────────────────────────────────────
 
-module "vpc" {
-  source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
-
-  name = "${var.project_name}-${var.environment}-vpc"
-  cidr = var.vpc_cidr
-
-  azs             = var.availability_zones
-  private_subnets = var.private_subnet_cidrs
-  public_subnets  = var.public_subnet_cidrs
-
-  enable_nat_gateway   = var.enable_nat_gateway
-  single_nat_gateway   = var.single_nat_gateway
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  # Required tags for EKS to discover subnets
-  public_subnet_tags = {
-    "kubernetes.io/role/elb"                    = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+data "aws_vpc" "networking" {
+  tags = {
+    Name = "${var.project_name}-${var.environment}-vpc"
   }
+}
 
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb"           = "1"
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+data "aws_subnets" "private" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.networking.id]
   }
+  tags = {
+    Tier = "private"
+  }
+}
 
-  tags = var.additional_tags
+data "aws_subnets" "public" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.networking.id]
+  }
+  tags = {
+    Tier = "public"
+  }
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +100,7 @@ resource "aws_iam_role_policy_attachment" "ecr_read_only" {
 resource "aws_security_group" "eks_cluster" {
   name        = "${var.cluster_name}-cluster-sg"
   description = "Security group for the EKS control plane"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.aws_vpc.networking.id
 
   egress {
     from_port   = 0
@@ -136,7 +134,7 @@ resource "aws_security_group_rule" "nodes_to_cluster" {
 resource "aws_security_group" "eks_nodes" {
   name        = "${var.cluster_name}-nodes-sg"
   description = "Security group for EKS worker nodes"
-  vpc_id      = module.vpc.vpc_id
+  vpc_id      = data.aws_vpc.networking.id
 
   ingress {
     from_port   = 0
@@ -178,7 +176,7 @@ resource "aws_eks_cluster" "main" {
   version  = var.cluster_version
 
   vpc_config {
-    subnet_ids              = module.vpc.private_subnets
+    subnet_ids              = data.aws_subnets.private.ids
     security_group_ids      = [aws_security_group.eks_cluster.id]
     endpoint_public_access  = var.cluster_endpoint_public_access
     public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
@@ -202,7 +200,10 @@ resource "aws_eks_cluster" "main" {
     aws_iam_role_policy_attachment.eks_vpc_resource_controller,
   ]
 
-  tags = var.additional_tags
+  tags = merge(
+    { "kubernetes.io/cluster/${var.cluster_name}" = "owned" },
+    var.additional_tags
+  )
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -229,7 +230,7 @@ resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = var.node_group_name
   node_role_arn   = aws_iam_role.eks_nodes.arn
-  subnet_ids      = module.vpc.private_subnets
+  subnet_ids      = data.aws_subnets.private.ids
 
   instance_types = var.node_instance_types
   ami_type       = var.node_ami_type
