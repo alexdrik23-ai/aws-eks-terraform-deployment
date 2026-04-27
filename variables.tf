@@ -66,14 +66,9 @@ variable "enable_cluster_encryption" {
 }
 
 variable "kms_key_arn" {
-  description = "ARN of the KMS key to use for EKS secret encryption. Required if enable_cluster_encryption is true."
+  description = "..."
   type        = string
   default     = ""
-
-  validation {
-    condition     = !var.enable_cluster_encryption || length(var.kms_key_arn) > 0
-    error_message = "kms_key_arn must be provided when enable_cluster_encryption is true."
-  }
 }
 
 # ─────────────────────────────────────────────
@@ -95,7 +90,7 @@ variable "node_instance_types" {
 variable "node_ami_type" {
   description = "AMI type for the node group (AL2_x86_64, AL2_ARM_64, BOTTLEROCKET_x86_64, etc.)."
   type        = string
-  default     = "AL2_x86_64"
+  default     = "AL2023_x86_64_STANDARD"
 }
 
 variable "node_disk_size" {
